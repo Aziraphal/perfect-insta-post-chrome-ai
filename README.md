@@ -1,4 +1,4 @@
-# Perfect Insta Post - Chrome AI Challenge 2025 🏆
+# Perfect Insta Post - Chrome AI Challenge 2025 Entry
 
 [![Chrome AI Challenge](https://img.shields.io/badge/Chrome%20AI%20Challenge-2025-blue)](https://developer.chrome.com/docs/ai/built-in)
 [![Chrome Extension](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-green)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -189,4 +189,4 @@ MIT License - feel free to use this project as inspiration for your own Chrome A
 
 **Perfect Insta Post** - Where AI meets Instagram, privacy meets performance, and every photo gets the words it deserves.
 
-[![Chrome AI Challenge](https://img.shields.io/badge/Submitted%20to-Chrome%20AI%20Challenge%202025-success)](https://developer.chrome.com/docs/ai/built-in)
+[![Chrome AI Challenge](https://img.shields.io/badge/Entry%20for-Chrome%20AI%20Challenge%202025-blue)](https://developer.chrome.com/docs/ai/built-in)
