@@ -1,20 +1,14 @@
 // =============================================================================
-// PERFECT INSTA POST - SERVICE WORKER (BACKGROUND.JS)
-// Gestion de l'authentification Google OAuth avec chrome.identity
+// BACKGROUND SERVICE WORKER V2 - AUTH UNIQUEMENT
+// Gestion simplifiée de l'authentification Google OAuth
 // =============================================================================
 
 const CONFIG = {
-    backend: {
-        baseUrl: 'https://perfect-insta-extension-production.up.railway.app',
-        endpoints: {
-            auth: '/auth/google',
-            userMe: '/api/user/me',
-            generatePost: '/api/generate-post'
-        }
-    }
+    backendUrl: 'https://perfect-insta-extension-production.up.railway.app',
+    authTimeout: 2 * 60 * 1000 // 2 minutes
 };
 
-// État global du service worker
+// État d'authentification
 let authState = {
     isAuthenticated: false,
     jwtToken: null,
@@ -22,54 +16,27 @@ let authState = {
 };
 
 // =============================================================================
-// INITIALISATION DU SERVICE WORKER
+// LIFECYCLE
 // =============================================================================
 
-// Charger l'état d'authentification au démarrage du service worker
 chrome.runtime.onStartup.addListener(async () => {
-    console.log('🚀 Perfect Insta Service Worker - Startup');
+    console.log('🚀 Service Worker - Startup');
     await loadAuthState();
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
-    console.log('🚀 Perfect Insta Service Worker - Installed');
+    console.log('🚀 Service Worker - Installed');
     await loadAuthState();
 });
 
-// Charger l'état d'authentification depuis chrome.storage
-async function loadAuthState() {
-    try {
-        const stored = await chrome.storage.local.get(['jwtToken', 'user']);
-        if (stored.jwtToken && stored.user) {
-            authState.jwtToken = stored.jwtToken;
-            authState.user = stored.user;
-            authState.isAuthenticated = true;
-            console.log('✅ Auth state chargé:', stored.user.email);
-
-            // Valider le token avec le backend
-            await validateToken();
-        } else {
-            console.log('🔍 Aucun état d\'auth trouvé');
-            authState.isAuthenticated = false;
-        }
-    } catch (error) {
-        console.error('❌ Erreur chargement auth state:', error);
-        authState.isAuthenticated = false;
-    }
-}
-
 // =============================================================================
-// GESTION DES MESSAGES DEPUIS LE POPUP
+// MESSAGES
 // =============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('📨 Message reçu:', message.type);
+    console.log('📨 Message:', message.type);
 
     switch (message.type) {
-        case 'LOGIN':
-            handleLogin(sendResponse);
-            return true; // Réponse asynchrone
-
         case 'GET_AUTH':
             sendResponse({
                 isAuthenticated: authState.isAuthenticated,
@@ -78,9 +45,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
             return false;
 
+        case 'LOGIN':
+            handleLogin(sendResponse);
+            return true; // Async
+
         case 'LOGOUT':
             handleLogout(sendResponse);
-            return true; // Réponse asynchrone
+            return true; // Async
 
         case 'VALIDATE_TOKEN':
             validateToken().then(() => {
@@ -89,193 +60,130 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     user: authState.user
                 });
             });
-            return true; // Réponse asynchrone
+            return true; // Async
 
         default:
-            console.warn('⚠️ Type de message non reconnu:', message.type);
-            sendResponse({ success: false, error: 'Type de message non reconnu' });
+            sendResponse({ success: false, error: 'Unknown message type' });
             return false;
     }
 });
 
 // =============================================================================
-// AUTHENTIFICATION GOOGLE OAUTH
+// AUTHENTIFICATION
 // =============================================================================
+
+async function loadAuthState() {
+    try {
+        const stored = await chrome.storage.local.get(['jwtToken', 'user']);
+
+        if (stored.jwtToken && stored.user) {
+            authState = {
+                isAuthenticated: true,
+                jwtToken: stored.jwtToken,
+                user: stored.user
+            };
+            console.log('✅ Auth chargée:', stored.user.email);
+
+            // Valider le token
+            await validateToken();
+        } else {
+            console.log('🔍 Pas d\'auth');
+            authState.isAuthenticated = false;
+        }
+    } catch (error) {
+        console.error('❌ Load auth error:', error);
+        authState.isAuthenticated = false;
+    }
+}
 
 async function handleLogin(sendResponse) {
     try {
-        console.log('🔐 Démarrage du flow OAuth simple...');
+        console.log('🔐 Login...');
 
-        // Ouvrir un onglet normal vers la page de connexion
-        const authUrl = `${CONFIG.backend.baseUrl}/auth/extension`;
-        console.log('🌐 Auth URL:', authUrl);
+        const authUrl = `${CONFIG.backendUrl}/auth/extension`;
 
-        chrome.tabs.create({ url: authUrl }, (tab) => {
-            console.log('🔗 Onglet OAuth ouvert:', tab.id);
+        chrome.tabs.create({ url: authUrl, active: true }, (authTab) => {
+            let completed = false;
 
-            // Écouter les changements d'URL de cet onglet
-            const updateListener = (tabId, changeInfo, updatedTab) => {
-                if (tabId === tab.id && changeInfo.url) {
-                    console.log('🔄 URL changée:', changeInfo.url);
+            const listener = (tabId, changeInfo) => {
+                if (tabId !== authTab.id || completed || !changeInfo.url) return;
 
-                    // Vérifier si on a une réponse de succès (callback ou success)
-                    if ((changeInfo.url.includes('/auth/success') && changeInfo.url.includes('success=true')) ||
-                        (changeInfo.url.includes('/auth/google/callback') && changeInfo.url.includes('code='))) {
-                        try {
-                            console.log('🎯 URL de succès détectée:', changeInfo.url);
-                            const url = new URL(changeInfo.url);
+                const url = changeInfo.url;
 
-                            // Si c'est /auth/success, extraire directement token et user
-                            if (changeInfo.url.includes('/auth/success')) {
-                                const token = url.searchParams.get('token');
-                                const userStr = url.searchParams.get('user');
+                // Success: /auth/success?token=xxx&user=yyy
+                if (url.includes('/auth/success')) {
+                    completed = true;
 
-                                console.log('🔑 Token extrait:', token ? 'présent' : 'manquant');
-                                console.log('👤 User extrait:', userStr ? 'présent' : 'manquant');
+                    try {
+                        const urlObj = new URL(url);
+                        const token = urlObj.searchParams.get('token');
+                        const userStr = urlObj.searchParams.get('user');
 
-                                if (token && userStr) {
-                                    const user = JSON.parse(decodeURIComponent(userStr));
-                                    console.log('✅ Données utilisateur parsées:', user.email);
+                        if (token && userStr) {
+                            const user = JSON.parse(decodeURIComponent(userStr));
 
-                                    // Sauvegarder l'état d'auth
-                                    saveAuthState(token, user).then(() => {
-                                        console.log('💾 Auth state sauvegardé');
-                                        sendResponse({
-                                            success: true,
-                                            token: token,
-                                            user: user
-                                        });
+                            saveAuthState(token, user).then(() => {
+                                chrome.tabs.onUpdated.removeListener(listener);
+                                chrome.tabs.remove(authTab.id).catch(() => {});
 
-                                        // Attendre un peu avant de fermer l'onglet
-                                        setTimeout(() => {
-                                            chrome.tabs.remove(tab.id);
-                                            chrome.tabs.onUpdated.removeListener(updateListener);
-                                        }, 1000);
-                                    });
-                                } else {
-                                    console.error('❌ Token ou user manquant dans l\'URL');
-                                    sendResponse({
-                                        success: false,
-                                        error: 'Token ou données utilisateur manquants'
-                                    });
-                                }
-                            }
-                            // Si c'est /auth/google/callback, attendre un peu la redirection
-                            else if (changeInfo.url.includes('/auth/google/callback')) {
-                                console.log('⏳ Callback détecté, attente de la redirection...');
-                                // Attendre 3 secondes que la page se redirige vers /auth/success
-                                setTimeout(() => {
-                                    chrome.tabs.get(tab.id, (currentTab) => {
-                                        if (chrome.runtime.lastError) {
-                                            console.log('⚠️ Onglet fermé pendant l\'attente');
-                                            return;
-                                        }
-
-                                        console.log('🔍 URL après attente:', currentTab.url);
-
-                                        // Si toujours sur callback, forcer une vérification manuelle
-                                        if (currentTab.url.includes('/auth/google/callback')) {
-                                            console.log('❌ Pas de redirection, échec de l\'authentification');
-                                            sendResponse({
-                                                success: false,
-                                                error: 'Redirection vers la page de succès échouée'
-                                            });
-                                            chrome.tabs.remove(tab.id);
-                                            chrome.tabs.onUpdated.removeListener(updateListener);
-                                        }
-                                    });
-                                }, 3000);
-                            }
-                        } catch (parseError) {
-                            console.error('❌ Erreur parsing OAuth:', parseError);
-                            sendResponse({
-                                success: false,
-                                error: 'Erreur parsing: ' + parseError.message
+                                sendResponse({
+                                    success: true,
+                                    token,
+                                    user
+                                });
                             });
-                            chrome.tabs.remove(tab.id);
-                            chrome.tabs.onUpdated.removeListener(updateListener);
+                        } else {
+                            throw new Error('Token/user manquants');
                         }
-                    }
+                    } catch (error) {
+                        console.error('❌ Parse error:', error);
+                        chrome.tabs.onUpdated.removeListener(listener);
+                        chrome.tabs.remove(authTab.id).catch(() => {});
 
-                    // Vérifier si on a une erreur
-                    if (changeInfo.url.includes('error=')) {
-                        const url = new URL(changeInfo.url);
-                        const error = url.searchParams.get('error') || 'Erreur OAuth inconnue';
-
-                        console.error('❌ Erreur OAuth:', error);
                         sendResponse({
                             success: false,
-                            error: error
+                            error: 'Erreur de traitement'
                         });
-                        chrome.tabs.remove(tab.id);
-                        chrome.tabs.onUpdated.removeListener(updateListener);
                     }
+                }
+
+                // Error: /auth/error?error=xxx
+                if (url.includes('/auth/error') || url.includes('error=')) {
+                    completed = true;
+
+                    const urlObj = new URL(url);
+                    const error = urlObj.searchParams.get('error') || 'Erreur OAuth';
+
+                    console.error('❌ OAuth error:', error);
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    chrome.tabs.remove(authTab.id).catch(() => {});
+
+                    sendResponse({
+                        success: false,
+                        error
+                    });
                 }
             };
 
-            chrome.tabs.onUpdated.addListener(updateListener);
+            chrome.tabs.onUpdated.addListener(listener);
 
-            // Timeout après 5 minutes
+            // Timeout
             setTimeout(() => {
-                chrome.tabs.onUpdated.removeListener(updateListener);
-                sendResponse({
-                    success: false,
-                    error: 'Timeout - connexion trop longue'
-                });
-            }, 5 * 60 * 1000);
+                if (!completed) {
+                    completed = true;
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    chrome.tabs.remove(authTab.id).catch(() => {});
+
+                    sendResponse({
+                        success: false,
+                        error: 'Timeout'
+                    });
+                }
+            }, CONFIG.authTimeout);
         });
 
     } catch (error) {
-        console.error('❌ Erreur générale lors du login:', error);
-        sendResponse({
-            success: false,
-            error: 'Erreur générale: ' + error.message
-        });
-    }
-}
-
-// Sauvegarder l'état d'authentification
-async function saveAuthState(token, user) {
-    try {
-        // Sauvegarder en local
-        await chrome.storage.local.set({
-            jwtToken: token,
-            user: user
-        });
-
-        // Mettre à jour l'état du service worker
-        authState.jwtToken = token;
-        authState.user = user;
-        authState.isAuthenticated = true;
-
-        console.log('💾 État d\'auth sauvegardé pour:', user.email);
-    } catch (error) {
-        console.error('❌ Erreur sauvegarde auth state:', error);
-        throw error;
-    }
-}
-
-// =============================================================================
-// DÉCONNEXION
-// =============================================================================
-
-async function handleLogout(sendResponse) {
-    try {
-        console.log('🚪 Déconnexion en cours...');
-
-        // Supprimer de chrome.storage
-        await chrome.storage.local.remove(['jwtToken', 'user']);
-
-        // Reset de l'état du service worker
-        authState.jwtToken = null;
-        authState.user = null;
-        authState.isAuthenticated = false;
-
-        console.log('✅ Déconnexion réussie');
-        sendResponse({ success: true });
-
-    } catch (error) {
-        console.error('❌ Erreur lors de la déconnexion:', error);
+        console.error('❌ Login error:', error);
         sendResponse({
             success: false,
             error: error.message
@@ -283,9 +191,45 @@ async function handleLogout(sendResponse) {
     }
 }
 
-// =============================================================================
-// VALIDATION TOKEN
-// =============================================================================
+async function handleLogout(sendResponse) {
+    try {
+        console.log('🚪 Logout');
+
+        await chrome.storage.local.remove(['jwtToken', 'user']);
+
+        authState = {
+            isAuthenticated: false,
+            jwtToken: null,
+            user: null
+        };
+
+        sendResponse({ success: true });
+
+    } catch (error) {
+        console.error('❌ Logout error:', error);
+        sendResponse({
+            success: false,
+            error: error.message
+        });
+    }
+}
+
+async function saveAuthState(token, user) {
+    try {
+        await chrome.storage.local.set({ jwtToken: token, user });
+
+        authState = {
+            isAuthenticated: true,
+            jwtToken: token,
+            user
+        };
+
+        console.log('💾 Auth sauvegardée:', user.email);
+    } catch (error) {
+        console.error('❌ Save auth error:', error);
+        throw error;
+    }
+}
 
 async function validateToken() {
     if (!authState.jwtToken) {
@@ -294,9 +238,9 @@ async function validateToken() {
     }
 
     try {
-        console.log('🔍 Validation du token...');
+        console.log('🔍 Validation token...');
 
-        const response = await fetch(`${CONFIG.backend.baseUrl}${CONFIG.backend.endpoints.userMe}`, {
+        const response = await fetch(`${CONFIG.backendUrl}/api/user/me`, {
             headers: {
                 'Authorization': `Bearer ${authState.jwtToken}`,
                 'Content-Type': 'application/json'
@@ -307,30 +251,29 @@ async function validateToken() {
             const data = await response.json();
             authState.user = data.user;
             authState.isAuthenticated = true;
-            console.log('✅ Token valide, utilisateur:', data.user.email);
+            console.log('✅ Token valide:', data.user.email);
 
-            // Mettre à jour le storage avec les nouvelles données
+            // Mettre à jour le storage
             await chrome.storage.local.set({ user: data.user });
         } else {
-            console.warn('⚠️ Token invalide, déconnexion...');
+            console.warn('⚠️ Token invalide');
             await handleLogout(() => {});
         }
     } catch (error) {
-        console.error('❌ Erreur validation token:', error);
+        console.error('❌ Validate error:', error);
         // Ne pas déconnecter automatiquement en cas d'erreur réseau
     }
 }
 
 // =============================================================================
-// VALIDATION PÉRIODIQUE DU TOKEN
+// VALIDATION PÉRIODIQUE
 // =============================================================================
 
-// Valider le token toutes les 30 minutes
 setInterval(async () => {
     if (authState.isAuthenticated) {
-        console.log('🔄 Validation périodique du token...');
+        console.log('🔄 Validation périodique');
         await validateToken();
     }
 }, 30 * 60 * 1000); // 30 minutes
 
-console.log('🎯 Perfect Insta Service Worker initialisé');
+console.log('🎯 Service Worker V2 initialisé');

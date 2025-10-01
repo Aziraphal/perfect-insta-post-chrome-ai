@@ -1,766 +1,491 @@
 // =============================================================================
-// PERFECT INSTA POST - POPUP (NOUVELLE VERSION AVEC SERVICE WORKER)
-// Interface utilisateur qui communique avec background.js
+// PERFECT INSTA POST - VERSION 2.0 (CLEAN & PERFORMANT)
+// Architecture simplifiée : popup.js → api.js → backend
 // =============================================================================
 
-// Configuration et constantes
+import { API } from './api.js';
+
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
 const CONFIG = {
-    maxFileSize: 10 * 1024 * 1024, // 10MB
+    maxImageSize: 10 * 1024 * 1024, // 10MB
     supportedFormats: ['image/jpeg', 'image/png', 'image/webp'],
-    backend: {
-        baseUrl: 'https://perfect-insta-extension-production.up.railway.app',
-        endpoints: {
-            generatePost: '/api/generate-post'
-        }
+    defaultOptions: {
+        postType: 'lifestyle',
+        tone: 'casual'
     }
 };
 
-// État global de l'application
-const AppState = {
-    currentImage: null,
+// =============================================================================
+// ÉTAT GLOBAL
+// =============================================================================
+
+const State = {
     auth: {
         isAuthenticated: false,
-        jwtToken: null,
+        token: null,
         user: null
-    }
-};
-
-// Éléments DOM
-const elements = {
-    uploadArea: document.getElementById('uploadArea'),
-    imageInput: document.getElementById('imageInput'),
-    previewImage: document.getElementById('previewImage'),
-    configSection: document.getElementById('configSection'),
-    resultsSection: document.getElementById('resultsSection'),
-    authSection: document.getElementById('authSection'),
-    postType: document.getElementById('postType'),
-    tone: document.getElementById('tone'),
-    location: document.getElementById('location'),
-    context: document.getElementById('context'),
-    captionLength: document.getElementById('captionLength'),
-    captionStyle: document.getElementById('captionStyle'),
-    generateBtn: document.getElementById('generateBtn'),
-    generatedCaption: document.getElementById('generatedCaption'),
-    hashtagsContainer: document.getElementById('hashtagsContainer'),
-    suggestionsList: document.getElementById('suggestionsList'),
-    copyBtn: document.getElementById('copyBtn'),
-    rewriteBtn: document.getElementById('rewriteBtn'),
-    newPostBtn: document.getElementById('newPostBtn'),
-    // Éléments d'authentification
-    googleLoginBtn: document.getElementById('googleLoginBtn'),
-    userBar: document.getElementById('userBar'),
-    userEmail: document.getElementById('userEmail'),
-    userPlan: document.getElementById('userPlan'),
-    usageText: document.getElementById('usageText'),
-    upgradeBtn: document.getElementById('upgradeBtn'),
-    logoutBtn: document.getElementById('logoutBtn')
+    },
+    currentImage: null,
+    currentFile: null,
+    result: null
 };
 
 // =============================================================================
-// INITIALISATION DE L'APPLICATION
+// ÉLÉMENTS DOM
+// =============================================================================
+
+const DOM = {
+    // Auth
+    authSection: null,
+    googleLoginBtn: null,
+    userBar: null,
+    userEmail: null,
+    userPlan: null,
+    logoutBtn: null,
+
+    // Upload
+    uploadArea: null,
+    imageInput: null,
+    previewImage: null,
+
+    // Config
+    configSection: null,
+    postTypeSelect: null,
+    toneSelect: null,
+    locationInput: null,
+    contextInput: null,
+    generateBtn: null,
+
+    // Results
+    resultsSection: null,
+    generatedCaption: null,
+    hashtagsContainer: null,
+    suggestionsList: null,
+    copyAllBtn: null,
+    copyCaptionBtn: null,
+    copyHashtagsBtn: null,
+    rewriteBtn: null,
+    newPostBtn: null
+};
+
+// =============================================================================
+// INITIALISATION
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Perfect Insta Post - Initialisation');
+    console.log('🚀 Perfect Insta Post v2.0 - Initialisation');
 
-    try {
-        // Charger l'état d'authentification depuis le service worker
-        await loadAuthenticationState();
+    // 1. Initialiser les références DOM
+    initDOM();
 
-        // Initialiser l'interface selon l'état d'auth
-        updateUI();
+    // 2. Charger l'authentification
+    await loadAuth();
 
-        // Configuration des event listeners
-        setupEventListeners();
+    // 3. Configurer les event listeners
+    setupListeners();
 
-        console.log('✅ Application initialisée avec succès');
+    // 4. Mettre à jour l'UI
+    updateUI();
 
-    } catch (error) {
-        console.error('❌ Erreur initialisation:', error);
-        showNotification('Erreur lors de l\'initialisation de l\'extension', 'error');
-    }
+    console.log('✅ Popup initialisé');
 });
 
+function initDOM() {
+    // Auth
+    DOM.authSection = document.getElementById('authSection');
+    DOM.googleLoginBtn = document.getElementById('googleLoginBtn');
+    DOM.userBar = document.getElementById('userBar');
+    DOM.userEmail = document.getElementById('userEmail');
+    DOM.userPlan = document.getElementById('userPlan');
+    DOM.logoutBtn = document.getElementById('logoutBtn');
+
+    // Upload
+    DOM.uploadArea = document.getElementById('uploadArea');
+    DOM.imageInput = document.getElementById('imageInput');
+    DOM.previewImage = document.getElementById('previewImage');
+
+    // Config
+    DOM.configSection = document.getElementById('configSection');
+    DOM.postTypeSelect = document.getElementById('postType');
+    DOM.toneSelect = document.getElementById('tone');
+    DOM.locationInput = document.getElementById('location');
+    DOM.contextInput = document.getElementById('context');
+    DOM.generateBtn = document.getElementById('generateBtn');
+
+    // Results
+    DOM.resultsSection = document.getElementById('resultsSection');
+    DOM.generatedCaption = document.getElementById('generatedCaption');
+    DOM.hashtagsContainer = document.getElementById('hashtagsContainer');
+    DOM.suggestionsList = document.getElementById('suggestionsList');
+    DOM.copyAllBtn = document.getElementById('copyAllBtn');
+    DOM.copyCaptionBtn = document.getElementById('copyCaptionBtn');
+    DOM.copyHashtagsBtn = document.getElementById('copyHashtagsBtn');
+    DOM.rewriteBtn = document.getElementById('rewriteBtn');
+    DOM.newPostBtn = document.getElementById('newPostBtn');
+
+    // Désactiver le bouton de génération au départ
+    if (DOM.generateBtn) {
+        DOM.generateBtn.disabled = true;
+    }
+}
+
+function setupListeners() {
+    // Auth
+    DOM.googleLoginBtn?.addEventListener('click', handleLogin);
+    DOM.logoutBtn?.addEventListener('click', handleLogout);
+
+    // Upload
+    DOM.imageInput?.addEventListener('change', handleImageSelect);
+    DOM.uploadArea?.addEventListener('click', () => DOM.imageInput?.click());
+    DOM.uploadArea?.addEventListener('dragover', handleDragOver);
+    DOM.uploadArea?.addEventListener('drop', handleDrop);
+
+    // Generate
+    DOM.generateBtn?.addEventListener('click', handleGenerate);
+
+    // Actions
+    DOM.copyAllBtn?.addEventListener('click', () => copyToClipboard('all'));
+    DOM.copyCaptionBtn?.addEventListener('click', () => copyToClipboard('caption'));
+    DOM.copyHashtagsBtn?.addEventListener('click', () => copyToClipboard('hashtags'));
+    DOM.rewriteBtn?.addEventListener('click', handleRewrite);
+    DOM.newPostBtn?.addEventListener('click', handleReset);
+}
+
 // =============================================================================
-// GESTION DE L'AUTHENTIFICATION
+// AUTHENTIFICATION
 // =============================================================================
 
-// Charger l'état d'authentification depuis le service worker
-async function loadAuthenticationState() {
+async function loadAuth() {
     try {
         const response = await chrome.runtime.sendMessage({ type: 'GET_AUTH' });
 
-        AppState.auth.isAuthenticated = response.isAuthenticated;
-        AppState.auth.jwtToken = response.token;
-        AppState.auth.user = response.user;
-
-        if (response.isAuthenticated) {
-            console.log('✅ Utilisateur authentifié:', response.user.email);
-        } else {
-            console.log('🔍 Utilisateur non authentifié');
+        if (response?.isAuthenticated) {
+            State.auth = {
+                isAuthenticated: true,
+                token: response.token,
+                user: response.user
+            };
+            API.setToken(response.token);
+            console.log('✅ Authentifié:', response.user.email);
         }
     } catch (error) {
-        console.error('❌ Erreur chargement auth state:', error);
-        AppState.auth.isAuthenticated = false;
+        console.error('❌ Erreur auth:', error);
     }
 }
 
-// Connexion Google OAuth
-async function loginWithGoogle() {
+async function handleLogin() {
     try {
-        console.log('🔐 Démarrage de la connexion...');
-
-        // Désactiver le bouton pendant le processus
-        if (elements.googleLoginBtn) {
-            elements.googleLoginBtn.disabled = true;
-            elements.googleLoginBtn.textContent = 'Connexion en cours...';
-        }
+        setButtonLoading(DOM.googleLoginBtn, true, 'Connexion en cours...');
 
         const response = await chrome.runtime.sendMessage({ type: 'LOGIN' });
 
-        if (response.success) {
-            console.log('✅ Connexion réussie');
-
-            // Mettre à jour l'état local
-            AppState.auth.isAuthenticated = true;
-            AppState.auth.jwtToken = response.token;
-            AppState.auth.user = response.user;
-
-            // Mettre à jour l'interface
+        if (response?.success) {
+            State.auth = {
+                isAuthenticated: true,
+                token: response.token,
+                user: response.user
+            };
+            API.setToken(response.token);
             updateUI();
-
-            showNotification(`Connexion réussie ! Bienvenue ${response.user.email}`, 'success');
+            console.log('✅ Connexion réussie !');
         } else {
-            console.error('❌ Erreur de connexion:', response.error);
-            showNotification('Erreur lors de la connexion: ' + response.error, 'error');
+            showToast(response.error || 'Erreur de connexion', 'error');
         }
     } catch (error) {
-        console.error('❌ Erreur lors de la connexion:', error);
-        showNotification('Erreur lors de la connexion', 'error');
+        console.error('❌ Login error:', error);
+        showToast('Erreur de connexion', 'error');
     } finally {
-        // Réactiver le bouton
-        if (elements.googleLoginBtn) {
-            elements.googleLoginBtn.disabled = false;
-            elements.googleLoginBtn.textContent = 'Se connecter avec Google';
-        }
+        setButtonLoading(DOM.googleLoginBtn, false, 'Se connecter avec Google');
     }
 }
 
-// Déconnexion
-async function logout() {
+async function handleLogout() {
     try {
-        console.log('🚪 Déconnexion...');
-
-        const response = await chrome.runtime.sendMessage({ type: 'LOGOUT' });
-
-        if (response.success) {
-            // Mettre à jour l'état local
-            AppState.auth.isAuthenticated = false;
-            AppState.auth.jwtToken = null;
-            AppState.auth.user = null;
-
-            // Mettre à jour l'interface
-            updateUI();
-
-            console.log('✅ Déconnexion réussie');
-        } else {
-            console.error('❌ Erreur déconnexion:', response.error);
-            showNotification('Erreur lors de la déconnexion', 'error');
-        }
+        await chrome.runtime.sendMessage({ type: 'LOGOUT' });
+        State.auth = { isAuthenticated: false, token: null, user: null };
+        API.setToken(null);
+        updateUI();
+        showToast('Déconnecté', 'success');
     } catch (error) {
-        console.error('❌ Erreur lors de la déconnexion:', error);
-        showNotification('Erreur lors de la déconnexion', 'error');
+        console.error('❌ Logout error:', error);
     }
 }
 
 // =============================================================================
-// GESTION DE L'INTERFACE UTILISATEUR
+// UPLOAD D'IMAGE
 // =============================================================================
 
-function updateUI() {
-    if (AppState.auth.isAuthenticated) {
-        updateUIForAuthenticatedUser();
+function handleImageSelect(event) {
+    const file = event.target.files?.[0];
+    if (file) processImage(file);
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+
+    if (file && CONFIG.supportedFormats.includes(file.type)) {
+        processImage(file);
     } else {
-        updateUIForUnauthenticatedUser();
+        showToast('Format non supporté (JPG, PNG, WebP uniquement)', 'error');
     }
 }
 
-function updateUIForAuthenticatedUser() {
-    console.log('🎨 UI: Utilisateur connecté');
-
-    // Masquer la section d'authentification
-    hideSection('authSection');
-
-    // Afficher la barre utilisateur
-    if (elements.userBar) {
-        elements.userBar.hidden = false;
-        elements.userEmail.textContent = AppState.auth.user.email;
-        elements.userPlan.textContent = AppState.auth.user.plan.toUpperCase();
-        elements.usageText.textContent = `${AppState.auth.user.postsThisMonth}/${AppState.auth.user.plan === 'free' ? 5 : 50} posts ce mois`;
-
-        // Afficher/masquer le bouton d'upgrade
-        if (AppState.auth.user.plan === 'free') {
-            elements.upgradeBtn.hidden = false;
-        } else {
-            elements.upgradeBtn.hidden = true;
-        }
-    }
-
-    // Permettre l'upload d'images
-    if (elements.uploadArea) {
-        elements.uploadArea.style.pointerEvents = 'auto';
-        elements.uploadArea.style.opacity = '1';
-    }
-
-    // Gérer les fonctionnalités Pro
-    updateProFeatures();
-}
-
-function updateProFeatures() {
-    const isPro = AppState.auth.user && AppState.auth.user.plan === 'pro';
-    console.log('🎯 Mise à jour Pro features, plan:', AppState.auth.user?.plan);
-
-    // Gérer l'overlay Pro principal
-    const mainProOverlay = document.getElementById('proOverlay');
-    if (mainProOverlay) {
-        mainProOverlay.hidden = isPro; // Masquer si utilisateur Pro
-    }
-
-    // Éléments des fonctionnalités Pro
-    const proFields = ['location', 'context', 'captionLength', 'captionStyle'];
-
-    proFields.forEach(fieldId => {
-        const field = document.getElementById(fieldId);
-        const container = field?.closest('.form-group');
-
-        if (container) {
-            if (isPro) {
-                // Activer pour les utilisateurs Pro
-                container.classList.remove('pro-disabled');
-                field.disabled = false;
-                field.style.opacity = '1';
-                field.style.pointerEvents = 'auto';
-
-                // Supprimer les overlays individuels s'ils existent
-                const existingOverlay = container.querySelector('.pro-overlay:not(#proOverlay)');
-                if (existingOverlay) {
-                    existingOverlay.remove();
-                }
-            } else {
-                // Désactiver pour les utilisateurs Free
-                container.classList.add('pro-disabled');
-                field.disabled = true;
-                field.style.opacity = '0.5';
-                field.style.pointerEvents = 'none';
-
-                // Ajouter overlay Pro si pas présent
-                if (!container.querySelector('.pro-overlay:not(#proOverlay)')) {
-                    const overlay = document.createElement('div');
-                    overlay.className = 'pro-overlay';
-                    overlay.innerHTML = `
-                        <div class="pro-badge">PRO</div>
-                        <small>Fonctionnalité Pro</small>
-                    `;
-                    overlay.addEventListener('click', showUpgradeModal);
-                    container.style.position = 'relative';
-                    container.appendChild(overlay);
-                }
-            }
-        }
-    });
-
-    // Afficher message de bienvenue Pro
-    const proWelcome = document.querySelector('.pro-welcome');
-    if (proWelcome) {
-        proWelcome.hidden = !isPro;
-    }
-}
-
-function showUpgradeModal() {
-    alert('Cette fonctionnalité est réservée aux utilisateurs Pro. Passez à Pro pour 19€/mois pour débloquer toutes les options avancées !');
-    // TODO: Implémenter un vrai modal stylé
-}
-
-
-function updateUIForUnauthenticatedUser() {
-    console.log('🎨 UI: Utilisateur non connecté');
-
-    // Masquer la barre utilisateur
-    if (elements.userBar) {
-        elements.userBar.hidden = true;
-    }
-
-    // Afficher la section d'authentification
-    showSection('authSection');
-
-    // Désactiver l'upload d'images
-    if (elements.uploadArea) {
-        elements.uploadArea.style.pointerEvents = 'none';
-        elements.uploadArea.style.opacity = '0.5';
-    }
-
-    // Masquer les autres sections
-    hideSection('configSection');
-    hideSection('resultsSection');
-}
-
-function showSection(sectionId) {
-    if (elements[sectionId]) {
-        elements[sectionId].hidden = false;
-    }
-}
-
-function hideSection(sectionId) {
-    if (elements[sectionId]) {
-        elements[sectionId].hidden = true;
-    }
-}
-
-// =============================================================================
-// GESTION DES IMAGES
-// =============================================================================
-
-function handleImageUpload(file) {
-    if (!AppState.auth.isAuthenticated) {
-        showNotification('Veuillez vous connecter pour uploader une image', 'error');
+function processImage(file) {
+    // Vérifier la taille
+    if (file.size > CONFIG.maxImageSize) {
+        showToast('Image trop volumineuse (max 10MB)', 'error');
         return;
     }
 
-    // Vérifications
-    if (!CONFIG.supportedFormats.includes(file.type)) {
-        showNotification('Format non supporté. Utilisez JPG, PNG ou WebP.', 'error');
-        return;
-    }
+    State.currentFile = file;
 
-    if (file.size > CONFIG.maxFileSize) {
-        showNotification('Fichier trop volumineux. Maximum 10MB.', 'error');
-        return;
-    }
-
-    AppState.currentImage = file;
-
-    // Prévisualisation
+    // Afficher la prévisualisation
     const reader = new FileReader();
     reader.onload = (e) => {
-        elements.previewImage.src = e.target.result;
-        elements.previewImage.hidden = false;
-        elements.uploadArea.querySelector('.upload-placeholder').style.display = 'none';
-        elements.uploadArea.classList.add('has-image');
+        State.currentImage = e.target.result;
 
-        // Agrandir le popup et afficher la config
-        document.body.classList.add('expanded');
-        showSection('configSection');
+        if (DOM.previewImage) {
+            DOM.previewImage.src = State.currentImage;
+            DOM.previewImage.hidden = false;
+        }
 
-        console.log('✅ Image uploadée:', file.name);
+        // Activer le bouton
+        if (DOM.generateBtn) {
+            DOM.generateBtn.disabled = false;
+        }
+
+        console.log('✅ Image chargée:', file.name, (file.size / 1024).toFixed(0) + 'KB');
     };
     reader.readAsDataURL(file);
 }
 
 // =============================================================================
-// GÉNÉRATION DE POST
+// GÉNÉRATION DE CONTENU
 // =============================================================================
 
-async function generatePost() {
-    try {
-        // Vérifications préalables
-        if (!AppState.currentImage) {
-            showNotification('Veuillez d\'abord uploader une image', 'error');
-            return;
-        }
-
-        if (!AppState.auth.isAuthenticated) {
-            showNotification('Veuillez vous connecter pour générer un post', 'error');
-            return;
-        }
-
-        setLoading(true);
-
-        // Préparer la configuration selon le plan de l'utilisateur
-        const isPro = AppState.auth.user.plan === 'pro';
-        const config = {
-            postType: elements.postType.value,
-            tone: elements.tone.value,
-            // Fonctionnalités Pro uniquement si l'utilisateur est Pro
-            location: isPro ? elements.location.value : '',
-            context: isPro ? elements.context.value : '',
-            captionLength: isPro ? elements.captionLength.value : 'moyenne',
-            captionStyle: isPro ? elements.captionStyle.value : 'naturel'
-        };
-
-
-        // Utiliser le système hybride Chrome AI + Backend
-        console.log('🤖 Génération avec système hybride');
-
-        const content = await generatePostHybrid(AppState.currentImage, config);
-
-        // Afficher les résultats
-        displayResults(content);
-
-        // Afficher la section des résultats
-        showSection('resultsSection');
-
-        console.log('✅ Post généré avec succès');
-
-    } catch (error) {
-        console.error('❌ Erreur génération:', error);
-
-        if (error.message.includes('Token') || error.message.includes('Session')) {
-            showNotification('Session expirée, veuillez vous reconnecter', 'error');
-            await logout();
-        } else if (error.message.includes('Quota')) {
-            showNotification('Quota de posts atteint. Passez à Pro pour plus de posts !', 'error');
-        } else {
-            showNotification('Erreur lors de la génération: ' + error.message, 'error');
-        }
-    } finally {
-        setLoading(false);
-    }
-}
-
-// Générer un post avec le système hybride Chrome AI + Backend
-async function generatePostHybrid(imageFile, config) {
-    try {
-        // Vérifier si le système hybride est disponible
-        if (!window.hybridAI) {
-            console.warn('⚠️ Système hybride non disponible, fallback vers backend');
-            const imageData = await getImageAsBase64(imageFile);
-            return await generatePostWithBackend(imageData, config);
-        }
-
-        // Utiliser le système hybride
-        console.log('🤖 Utilisation du système hybride');
-        const result = await window.hybridAI.generatePost(imageFile, config);
-
-        if (!result.success) {
-            throw new Error(result.error || 'Erreur génération hybride');
-        }
-
-        // Formater selon le format attendu par l'interface
-        return {
-            caption: result.caption,
-            hashtags: result.hashtags || [],
-            suggestions: result.suggestions || [
-                'Votre post a été généré avec l\'IA locale pour une meilleure confidentialité',
-                'Essayez le bouton "Réécrire" pour des variations',
-                'Adaptez le contenu selon votre style personnel'
-            ]
-        };
-
-    } catch (error) {
-        console.error('❌ Erreur système hybride, fallback vers backend:', error);
-        const imageData = await getImageAsBase64(imageFile);
-        return await generatePostWithBackend(imageData, config);
-    }
-}
-
-// Générer un post avec authentification backend
-async function generatePostWithBackend(imageData, config) {
-    if (!AppState.auth.isAuthenticated) {
-        throw new Error('Utilisateur non authentifié');
-    }
-
-    try {
-        const response = await fetch(`${CONFIG.backend.baseUrl}${CONFIG.backend.endpoints.generatePost}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${AppState.auth.jwtToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                imageData: imageData,
-                config: config
-            })
-        });
-
-        if (!response.ok) {
-            if (response.status === 401 || response.status === 403) {
-                throw new Error('Session expirée, veuillez vous reconnecter');
-            }
-            throw new Error(`Erreur backend: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        // Mettre à jour le compteur d'usage
-        if (data.user) {
-            AppState.auth.user = data.user;
-            elements.usageText.textContent = `${data.user.postsThisMonth}/${data.user.plan === 'free' ? 5 : 50} posts ce mois`;
-        }
-
-        return data.content;
-
-    } catch (error) {
-        console.error('❌ Erreur génération backend:', error);
-        throw error;
-    }
-}
-
-// Convertir l'image en base64
-function getImageAsBase64(imageFile) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = reader.result;
-            const base64Data = result.split(',')[1];
-            resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(imageFile);
-    });
-}
-
-// Affichage des résultats
-function displayResults(content) {
-    // Légende
-    elements.generatedCaption.value = content.caption;
-
-    // Hashtags
-    elements.hashtagsContainer.innerHTML = '';
-    content.hashtags.forEach(hashtag => {
-        const hashtagElement = document.createElement('span');
-        hashtagElement.className = 'hashtag';
-        const cleanHashtag = hashtag.startsWith('#') ? hashtag : `#${hashtag}`;
-        hashtagElement.textContent = cleanHashtag;
-        elements.hashtagsContainer.appendChild(hashtagElement);
-    });
-
-    // Suggestions
-    elements.suggestionsList.innerHTML = '';
-    content.suggestions.forEach(suggestion => {
-        const li = document.createElement('li');
-        li.textContent = suggestion;
-        elements.suggestionsList.appendChild(li);
-    });
-}
-
-// =============================================================================
-// ACTIONS UTILISATEUR
-// =============================================================================
-
-async function copyToClipboard() {
-    const caption = elements.generatedCaption.value;
-    const hashtags = Array.from(elements.hashtagsContainer.children)
-        .map(span => span.textContent)
-        .join(' ');
-
-    const fullText = `${caption}\n\n${hashtags}`;
-
-    try {
-        await navigator.clipboard.writeText(fullText);
-        elements.copyBtn.textContent = '✅ Copié!';
-        elements.copyBtn.classList.add('success');
-
-        setTimeout(() => {
-            elements.copyBtn.textContent = '📋 Copier tout';
-            elements.copyBtn.classList.remove('success');
-        }, 2000);
-    } catch (error) {
-        showNotification('Erreur lors de la copie', 'error');
-    }
-}
-
-function resetApp() {
-    AppState.currentImage = null;
-
-    elements.imageInput.value = '';
-    elements.previewImage.hidden = true;
-    elements.previewImage.src = '';
-    elements.uploadArea.querySelector('.upload-placeholder').style.display = 'block';
-    elements.uploadArea.classList.remove('has-image');
-
-    document.body.classList.remove('expanded');
-    hideSection('configSection');
-    hideSection('resultsSection');
-}
-
-// Réécrire la légende actuelle
-async function rewriteCaption() {
-    const currentCaption = elements.generatedCaption.value;
-
-    if (!currentCaption) {
-        showNotification('Aucune légende à réécrire', 'error');
+async function handleGenerate() {
+    if (!State.currentFile) {
+        showToast('Sélectionnez une image', 'error');
         return;
     }
 
     try {
-        // Désactiver le bouton temporairement
-        const rewriteBtn = document.getElementById('rewriteBtn');
-        const originalText = rewriteBtn.textContent;
-        rewriteBtn.disabled = true;
-        rewriteBtn.textContent = '✨ Réécriture...';
+        setButtonLoading(DOM.generateBtn, true, 'Génération...');
 
-        // Styles de réécriture disponibles
-        const styles = ['more-engaging', 'creative', 'professional', 'casual'];
-        const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+        const options = {
+            postType: DOM.postTypeSelect?.value || CONFIG.defaultOptions.postType,
+            tone: DOM.toneSelect?.value || CONFIG.defaultOptions.tone,
+            location: DOM.locationInput?.value?.trim() || '',
+            context: DOM.contextInput?.value?.trim() || ''
+        };
 
-        let newCaption;
+        console.log('🎨 Génération avec options:', options);
 
-        // Essayer Chrome AI d'abord
-        if (window.hybridAI && window.hybridAI.chromeAI?.capabilities.rewriterAPI) {
-            console.log('🔄 Réécriture avec Chrome AI');
-            const result = await window.hybridAI.rewriteCaption(currentCaption, randomStyle);
+        // Appel API centralisé
+        const result = await API.generatePost(State.currentFile, options);
 
-            if (result.success && !result.requiresBackend) {
-                newCaption = result.content;
-            }
+        if (result.success) {
+            State.result = result;
+            displayResults(result);
+            show(DOM.resultsSection);
+            console.log('✅ Généré:', result);
+        } else {
+            showToast(result.error || 'Erreur de génération', 'error');
         }
-
-        // Fallback vers backend si nécessaire
-        if (!newCaption) {
-            console.log('📡 Réécriture avec backend');
-            newCaption = await rewriteCaptionBackend(currentCaption, randomStyle);
-        }
-
-        // Mettre à jour la légende
-        elements.generatedCaption.value = newCaption;
-
-        // Animation de mise à jour
-        elements.generatedCaption.style.background = 'rgba(156, 39, 176, 0.1)';
-        setTimeout(() => {
-            elements.generatedCaption.style.background = '';
-        }, 1000);
-
-        // Feedback visuel sur le bouton
-        rewriteBtn.textContent = '✅ Réécrit!';
-        rewriteBtn.style.background = 'linear-gradient(135deg, #4CAF50, #45a049)';
-
-        setTimeout(() => {
-            rewriteBtn.textContent = originalText;
-            rewriteBtn.style.background = '';
-            rewriteBtn.disabled = false;
-        }, 2000);
 
     } catch (error) {
-        console.error('❌ Erreur réécriture:', error);
-        showNotification('Erreur lors de la réécriture: ' + error.message, 'error');
-
-        const rewriteBtn = document.getElementById('rewriteBtn');
-        rewriteBtn.textContent = '✨ Réécrire';
-        rewriteBtn.disabled = false;
+        console.error('❌ Generate error:', error);
+        showToast('Erreur: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(DOM.generateBtn, false, '✨ Générer le post');
     }
 }
 
-// Réécriture via backend (fallback)
-async function rewriteCaptionBackend(caption, style) {
-    if (!AppState.auth.isAuthenticated) {
-        throw new Error('Authentification requise');
+function displayResults(result) {
+    // Caption
+    if (DOM.generatedCaption) {
+        DOM.generatedCaption.value = result.caption || '';
     }
 
-    const response = await fetch(`${CONFIG.backend.baseUrl}/api/rewrite-caption`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${AppState.auth.jwtToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            caption: caption,
-            style: style
-        })
-    });
-
-    if (!response.ok) {
-        throw new Error(`Erreur backend: ${response.statusText}`);
+    // Hashtags
+    if (DOM.hashtagsContainer && result.hashtags) {
+        DOM.hashtagsContainer.innerHTML = '';
+        result.hashtags.forEach(tag => {
+            const span = document.createElement('span');
+            span.className = 'hashtag';
+            span.textContent = tag.startsWith('#') ? tag : '#' + tag;
+            DOM.hashtagsContainer.appendChild(span);
+        });
     }
 
-    const data = await response.json();
-    return data.rewritten_caption;
+    // Suggestions
+    if (DOM.suggestionsList && result.suggestions) {
+        DOM.suggestionsList.innerHTML = '';
+        result.suggestions.forEach(suggestion => {
+            const li = document.createElement('li');
+            li.textContent = suggestion;
+            DOM.suggestionsList.appendChild(li);
+        });
+    }
 }
 
 // =============================================================================
-// EVENT LISTENERS
+// ACTIONS
 // =============================================================================
 
-function setupEventListeners() {
-    // Connexion Google
-    if (elements.googleLoginBtn) {
-        elements.googleLoginBtn.addEventListener('click', loginWithGoogle);
+async function handleRewrite() {
+    if (!State.result?.caption) {
+        showToast('Aucune légende à réécrire', 'error');
+        return;
     }
 
-    // Déconnexion
-    if (elements.logoutBtn) {
-        elements.logoutBtn.addEventListener('click', logout);
-    }
+    try {
+        setButtonLoading(DOM.rewriteBtn, true, 'Réécriture...');
 
-    // Upload d'image
-    if (elements.uploadArea) {
-        elements.uploadArea.addEventListener('click', () => {
-            if (AppState.auth.isAuthenticated) {
-                elements.imageInput.click();
+        const tone = DOM.toneSelect?.value || 'casual';
+        const result = await API.rewriteCaption(State.result.caption, tone);
+
+        if (result.success && result.caption) {
+            State.result.caption = result.caption;
+            if (DOM.generatedCaption) {
+                DOM.generatedCaption.value = result.caption;
             }
-        });
+            showToast('Légende réécrite !', 'success');
+        } else {
+            showToast('Erreur de réécriture', 'error');
+        }
 
-        elements.uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            if (AppState.auth.isAuthenticated) {
-                elements.uploadArea.classList.add('drag-over');
-            }
-        });
-
-        elements.uploadArea.addEventListener('dragleave', () => {
-            elements.uploadArea.classList.remove('drag-over');
-        });
-
-        elements.uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            elements.uploadArea.classList.remove('drag-over');
-
-            if (AppState.auth.isAuthenticated && e.dataTransfer.files.length > 0) {
-                handleImageUpload(e.dataTransfer.files[0]);
-            }
-        });
+    } catch (error) {
+        console.error('❌ Rewrite error:', error);
+        showToast('Erreur: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(DOM.rewriteBtn, false, '✨ Réécrire');
     }
+}
 
-    if (elements.imageInput) {
-        elements.imageInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) {
-                handleImageUpload(e.target.files[0]);
-            }
-        });
+function handleReset() {
+    State.currentImage = null;
+    State.currentFile = null;
+    State.result = null;
+
+    if (DOM.imageInput) DOM.imageInput.value = '';
+    if (DOM.previewImage) {
+        DOM.previewImage.hidden = true;
+        DOM.previewImage.src = '';
     }
+    if (DOM.generateBtn) DOM.generateBtn.disabled = true;
 
-    // Génération de post
-    if (elements.generateBtn) {
-        elements.generateBtn.addEventListener('click', generatePost);
-    }
-
-    // Actions des résultats
-    if (elements.copyBtn) {
-        elements.copyBtn.addEventListener('click', copyToClipboard);
-    }
-
-    if (elements.rewriteBtn) {
-        elements.rewriteBtn.addEventListener('click', rewriteCaption);
-    }
-
-    if (elements.newPostBtn) {
-        elements.newPostBtn.addEventListener('click', resetApp);
-    }
-
-    console.log('🔧 Event listeners configurés');
+    hide(DOM.resultsSection);
+    console.log('🔄 Reset');
 }
 
 // =============================================================================
-// UTILITAIRES
+// COPIE VERS PRESSE-PAPIER
 // =============================================================================
 
-function setLoading(loading) {
-    elements.generateBtn.disabled = loading;
-    const btnText = elements.generateBtn.querySelector('.btn-text');
-    const loader = elements.generateBtn.querySelector('.loader');
+function copyToClipboard(type) {
+    let text = '';
 
-    if (loading) {
-        btnText.textContent = '⏳ Génération en cours...';
-        if (loader) loader.hidden = false;
+    switch (type) {
+        case 'caption':
+            text = DOM.generatedCaption?.value || '';
+            break;
+
+        case 'hashtags':
+            const hashtags = Array.from(DOM.hashtagsContainer?.children || [])
+                .map(el => el.textContent)
+                .join(' ');
+            text = hashtags;
+            break;
+
+        case 'all':
+            const caption = DOM.generatedCaption?.value || '';
+            const tags = Array.from(DOM.hashtagsContainer?.children || [])
+                .map(el => el.textContent)
+                .join(' ');
+            text = `${caption}\n\n${tags}`;
+            break;
+    }
+
+    if (!text) {
+        showToast('Rien à copier', 'error');
+        return;
+    }
+
+    navigator.clipboard.writeText(text)
+        .then(() => showToast('Copié !', 'success'))
+        .catch(err => {
+            console.error('Copy error:', err);
+            showToast('Erreur de copie', 'error');
+        });
+}
+
+// =============================================================================
+// UI HELPERS
+// =============================================================================
+
+function updateUI() {
+    const isAuth = State.auth.isAuthenticated;
+
+    // Toggle sections
+    toggle(DOM.authSection, !isAuth);
+    toggle(DOM.uploadArea, isAuth);
+    toggle(DOM.configSection, isAuth);
+    toggle(DOM.userBar, isAuth);
+
+    // Update user info
+    if (isAuth && State.auth.user) {
+        if (DOM.userEmail) {
+            DOM.userEmail.textContent = State.auth.user.email;
+        }
+        if (DOM.userPlan) {
+            DOM.userPlan.textContent = State.auth.user.plan === 'pro' ? 'Pro' : 'Free';
+        }
+    }
+
+    console.log('🎨 UI mise à jour');
+}
+
+function setButtonLoading(button, isLoading, text) {
+    if (!button) return;
+    button.disabled = isLoading;
+    button.textContent = text;
+}
+
+function show(element) {
+    if (element) element.hidden = false;
+}
+
+function hide(element) {
+    if (element) element.hidden = true;
+}
+
+function toggle(element, visible) {
+    if (element) element.hidden = !visible;
+}
+
+function showToast(message, type = 'info') {
+    console.log(`[${type.toUpperCase()}]`, message);
+
+    // TODO: Remplacer par un vrai système de toast
+    // Pour l'instant, utiliser alert
+    if (type === 'error') {
+        alert('❌ ' + message);
+    } else if (type === 'success') {
+        // Ne pas afficher d'alert pour les succès (UX)
+        console.log('✅', message);
     } else {
-        btnText.textContent = '✨ Générer le post';
-        if (loader) loader.hidden = true;
+        alert('ℹ️ ' + message);
     }
 }
 
-function showNotification(message, type = 'info') {
-    // Implémentation simple avec alert pour l'instant
-    // TODO: Améliorer avec une notification toast personnalisée
-    alert(message);
-}
-
-console.log('🎯 Perfect Insta Post popup initialisé');
+console.log('📦 popup-v2.js chargé');

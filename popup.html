@@ -9,11 +9,12 @@
 <body>
     <div class="container">
         <header class="header">
-            <h1>📸 Perfect Insta Post</h1>
-            <p class="subtitle">Générez le post Instagram parfait avec l'IA</p>
-
-            <!-- AI Status Indicator -->
-            <div id="aiStatus" class="ai-status-container"></div>
+            <div class="header-top">
+                <div class="title-section">
+                    <h1>Perfect Insta Post</h1>
+                    <p class="subtitle">Générez le post Instagram parfait avec l'IA</p>
+                </div>
+            </div>
 
             <!-- Barre utilisateur -->
             <div class="user-bar" id="userBar" hidden>
@@ -21,17 +22,12 @@
                     <span class="user-email" id="userEmail"></span>
                     <span class="user-plan" id="userPlan">Free</span>
                 </div>
-                <div class="usage-info">
-                    <span class="usage-text" id="usageText">0/5 posts ce mois</span>
-                    <button class="upgrade-btn" id="upgradeBtn" hidden>Upgrade Pro</button>
-                </div>
-                <button class="logout-btn" id="logoutBtn">⚙️</button>
-                <button class="privacy-btn" id="privacyBtn">🔒</button>
+                <button class="logout-btn" id="logoutBtn" title="Se déconnecter">🚪</button>
             </div>
         </header>
 
         <div class="main-content">
-            <!-- Section Upload d'image -->
+            <!-- Section Upload -->
             <div class="upload-area" id="uploadArea">
                 <div class="upload-placeholder">
                     <svg width="48" height="48" fill="#ccc" viewBox="0 0 24 24">
@@ -42,49 +38,6 @@
                 </div>
                 <input type="file" id="imageInput" accept="image/*" hidden>
                 <img id="previewImage" class="image-preview" hidden>
-
-                <!-- Pro Features Preview -->
-                <div class="pro-features-preview" id="proFeaturesPreview">
-                    <div class="features-header">
-                        <h4>✨ Débloquez plus avec Pro</h4>
-                    </div>
-                    <div class="features-grid">
-                        <div class="feature-item">
-                            <span class="feature-icon">📍</span>
-                            <div class="feature-text">
-                                <strong>Localisation</strong>
-                                <small>Hashtags géolocalisés automatiques</small>
-                            </div>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon">🎯</span>
-                            <div class="feature-text">
-                                <strong>Contexte personnalisé</strong>
-                                <small>Angle et émotion sur mesure</small>
-                            </div>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon">📏</span>
-                            <div class="feature-text">
-                                <strong>Contrôle longueur</strong>
-                                <small>Courte, moyenne ou longue</small>
-                            </div>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon">🎨</span>
-                            <div class="feature-text">
-                                <strong>Styles variés</strong>
-                                <small>Storytelling, motivant, etc.</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="pro-cta">
-                        <button class="mini-upgrade-btn" id="miniUpgradeBtn">
-                            <span>🚀 Passer à Pro</span>
-                            <small>19€/mois • 50 posts</small>
-                        </button>
-                    </div>
-                </div>
             </div>
 
             <!-- Section Configuration -->
@@ -100,7 +53,6 @@
                         <option value="business">Business</option>
                         <option value="nature">Nature</option>
                         <option value="art">Art</option>
-                        <option value="auto">Auto-détection</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -113,70 +65,17 @@
                         <option value="educational">Éducatif</option>
                     </select>
                 </div>
-
-                <!-- Options avancées -->
-                <div class="advanced-section" id="advancedSection">
-                    <h4 class="collapsible-header" id="advancedHeader">
-                        <span>✨ Options avancées</span>
-                        <span class="pro-badge" id="proOnlyBadge" hidden>PRO</span>
-                        <span class="collapse-icon">▼</span>
-                    </h4>
-                    <div class="collapsible-content" id="advancedContent">
-
-                    <div class="form-group">
-                        <label for="location">📍 Lieu/Localisation :</label>
-                        <input type="text" id="location" placeholder="ex: Lac d'Annecy, Paris, chez moi...">
-                        <small>Ajoute des hashtags géolocalisés et du contexte</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="context">🎯 Contexte/Situation :</label>
-                        <input type="text" id="context" placeholder="ex: Weekend en famille, soirée entre amis...">
-                        <small>Personnalise l'angle et l'émotion du post</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="captionLength">📏 Longueur de légende :</label>
-                        <select id="captionLength">
-                            <option value="medium">Moyenne (100-150 mots)</option>
-                            <option value="short">Courte (50-80 mots)</option>
-                            <option value="long">Longue (150-250 mots)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="captionStyle">🎨 Style de légende :</label>
-                        <select id="captionStyle">
-                            <option value="engaging">Engageant (questions)</option>
-                            <option value="storytelling">Storytelling (histoire)</option>
-                            <option value="informative">Informatif (facts)</option>
-                            <option value="motivational">Motivant (citation)</option>
-                            <option value="personal">Personnel (ressenti)</option>
-                        </select>
-                    </div>
-
-                    <!-- Overlay pro-only pour utilisateurs gratuits -->
-                    <div class="pro-overlay" id="proOverlay" hidden>
-                        <div class="pro-message">
-                            <h3>🚀 Fonctionnalités Pro</h3>
-                            <p>Débloquez les options avancées :</p>
-                            <ul>
-                                <li>📍 Localisation personnalisée</li>
-                                <li>🎯 Contexte et situation</li>
-                                <li>📏 Contrôle de la longueur</li>
-                                <li>🎨 Styles variés</li>
-                                <li>⚡ 50 posts par mois</li>
-                            </ul>
-                            <button class="upgrade-btn-big" id="upgradeFromOverlay">
-                                Passer à Pro - 19€/mois
-                            </button>
-                        </div>
-                    </div>
-                    </div>
+                <div class="form-group">
+                    <label for="location">Lieu (optionnel) :</label>
+                    <input type="text" id="location" placeholder="Ex: Paris, Tour Eiffel">
                 </div>
+                <div class="form-group">
+                    <label for="context">Contexte (optionnel) :</label>
+                    <input type="text" id="context" placeholder="Ex: Weekend en famille">
+                </div>
+
                 <button id="generateBtn" class="generate-btn">
                     <span class="btn-text">✨ Générer le post</span>
-                    <span class="loader" hidden></span>
                 </button>
             </section>
 
@@ -196,13 +95,21 @@
                     <ul id="suggestionsList" class="suggestions-list"></ul>
                 </div>
                 <div class="action-buttons">
-                    <button id="copyBtn" class="copy-btn">📋 Copier tout</button>
-                    <button id="rewriteBtn" class="rewrite-btn">✨ Réécrire</button>
-                    <button id="newPostBtn" class="new-post-btn">🔄 Nouveau post</button>
+                    <div class="export-buttons">
+                        <button id="copyAllBtn" class="copy-btn primary">📋 Copier tout</button>
+                        <div class="export-options">
+                            <button id="copyCaptionBtn" class="copy-btn secondary">📝 Caption</button>
+                            <button id="copyHashtagsBtn" class="copy-btn secondary">#️⃣ Hashtags</button>
+                        </div>
+                    </div>
+                    <div class="main-actions">
+                        <button id="rewriteBtn" class="rewrite-btn">✨ Réécrire</button>
+                        <button id="newPostBtn" class="new-post-btn">🔄 Nouveau post</button>
+                    </div>
                 </div>
             </section>
 
-            <!-- Section Connexion Google OAuth -->
+            <!-- Section Connexion -->
             <section class="auth-section" id="authSection" hidden>
                 <div class="auth-content">
                     <h3>🔐 Connexion requise</h3>
@@ -220,114 +127,14 @@
                         Se connecter avec Google
                     </button>
 
+                    <p class="auth-note" style="color: #FF9800; font-weight: 500;">⚠️ Après connexion, recliquez sur l'icône de l'extension</p>
                     <p class="auth-note">🔒 Sécurisé et privé - Aucune donnée personnelle n'est stockée</p>
                 </div>
             </section>
-
-            <!-- Section Configuration manuel (fallback) -->
-            <section class="api-keys-section" id="apiKeysSection" hidden>
-                <h3>🔑 Configuration manuelle (optionnel)</h3>
-                <p class="api-info">Si vous préférez utiliser vos propres clés API :</p>
-
-                <div class="form-group">
-                    <label for="openaiKey">Clé OpenAI :</label>
-                    <input type="password" id="openaiKey" placeholder="sk-...">
-                    <small>Obtenez votre clé sur <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI</a></small>
-                </div>
-
-                <div class="form-group">
-                    <label for="googleVisionKey">Clé Google Vision API :</label>
-                    <input type="password" id="googleVisionKey" placeholder="AIza...">
-                    <small>Obtenez votre clé sur <a href="https://console.cloud.google.com/" target="_blank">Google Cloud</a></small>
-                </div>
-
-                <button id="saveApiKeys" class="save-btn">💾 Sauvegarder</button>
-                <button id="backToOAuth" class="back-btn">← Retour à la connexion Google</button>
-            </section>
-        </div>
-
-        <!-- Legal Footer -->
-        <footer class="legal-footer">
-            <div class="legal-links">
-                <button class="legal-link" id="privacyLink">Confidentialité</button>
-                <span class="separator">•</span>
-                <button class="legal-link" id="termsLink">CGU</button>
-                <span class="separator">•</span>
-                <button class="legal-link" id="cookiesLink">Cookies</button>
-            </div>
-            <small class="legal-text">© 2024 Perfect Insta Post • Conforme RGPD</small>
-        </footer>
-    </div>
-
-    <!-- GDPR Consent Popup -->
-    <div class="gdpr-popup" id="gdprPopup" hidden>
-        <div class="gdpr-content">
-            <h3>🔒 Respect de votre vie privée</h3>
-            <p>Perfect Insta Post respecte votre vie privée et vos données personnelles.</p>
-
-            <div class="gdpr-info">
-                <h4>Nous collectons uniquement :</h4>
-                <ul>
-                    <li>📧 Votre email Google (identification)</li>
-                    <li>📊 Statistiques d'usage anonymes</li>
-                    <li>🖼️ Images temporaires (non stockées)</li>
-                </ul>
-
-                <h4>Vos droits RGPD :</h4>
-                <p>Accès, rectification, effacement et portabilité de vos données à tout moment.</p>
-            </div>
-
-            <div class="gdpr-buttons">
-                <button class="gdpr-decline" id="gdprDecline">Refuser</button>
-                <button class="gdpr-accept" id="gdprAccept">Accepter et continuer</button>
-            </div>
-
-            <div class="gdpr-links">
-                <button class="gdpr-details" id="gdprDetails">Voir politique complète</button>
-            </div>
         </div>
     </div>
 
-    <!-- Privacy Modal -->
-    <div class="privacy-modal" id="privacyModal" hidden>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>🔒 Confidentialité & Données</h3>
-                <button class="modal-close" id="modalClose">×</button>
-            </div>
-            <div class="modal-body">
-                <h4>Données collectées :</h4>
-                <ul>
-                    <li>📧 Email Google (identification sécurisée)</li>
-                    <li>📊 Compteurs d'usage (posts générés)</li>
-                    <li>🖼️ Images analysées temporairement (non stockées)</li>
-                </ul>
-
-                <h4>Protection de vos données :</h4>
-                <ul>
-                    <li>🔐 Chiffrement bout en bout</li>
-                    <li>🚫 Aucun stockage d'images</li>
-                    <li>🗑️ Suppression automatique des données temporaires</li>
-                    <li>🌍 Serveurs européens (RGPD)</li>
-                </ul>
-
-                <h4>Vos droits :</h4>
-                <p>Conformément au RGPD, vous disposez du droit d'accès, de rectification, d'effacement et de portabilité de vos données.</p>
-
-                <div class="modal-actions">
-                    <button class="btn-link" id="fullPrivacyPolicy">Politique complète</button>
-                    <button class="btn-danger" id="deleteAccount">Supprimer mon compte</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="legal.js"></script>
-    <script src="chrome-ai.js"></script>
-    <script src="hybrid-ai.js"></script>
-    <script src="freemium.js"></script>
-    <script src="payment.js"></script>
-    <script src="analytics.js"></script>
-    <script src="popup.js"></script>
+    <!-- Scripts -->
+    <script type="module" src="popup.js"></script>
 </body>
 </html>
